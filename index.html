@@ -115,6 +115,18 @@ input[type=text]::placeholder { color: var(--text-muted); font-family: var(--mon
 .form-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
 @media(max-width:500px){ .form-row.cols-2,.form-row.cols-3{grid-template-columns:1fr} }
 
+/* ── Shift editor ── */
+.shift-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; padding: 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; background: var(--panel); }
+.shift-row .f { display: flex; flex-direction: column; gap: 3px; }
+.shift-row .f small { font-size: 9px; color: var(--text-muted); font-family: var(--mono); letter-spacing: 0.04em; }
+.shift-row .f input { padding: 8px 10px; }
+.shift-row .f.code input { width: 68px; text-transform: uppercase; }
+.shift-row .f.label input { width: 96px; }
+.shift-row .skipwrap { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-dim); padding-bottom: 9px; }
+.shift-row .skipwrap input { width: 16px; height: 16px; accent-color: var(--accent); }
+.shift-row .del { margin-left: auto; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; padding: 0 4px 6px; }
+.shift-row .del:hover { color: var(--red); }
+
 /* ── Upload ── */
 .upload-zone {
   border: 1.5px dashed var(--border-hi); border-radius: 10px;
@@ -315,7 +327,7 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
     <div class="step-connector"></div>
     <div class="step-dot" id="nav3"><div class="num">3</div><span class="step-label">匯出行事曆</span></div>
   </div>
-  <div class="ver-badge">v1.3.0</div>
+  <div class="ver-badge">v1.4.0</div>
 </header>
 
 <main>
@@ -324,6 +336,14 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
 <section class="step-section active" id="s1">
   <h2>上傳班表</h2>
   <p class="sub">上傳班表圖片，輸入您的姓名與班表月份，即可開始 AI 辨識。</p>
+
+  <div id="restoreBanner" class="notice hidden" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <span id="restoreMsg" style="flex:1;min-width:180px"></span>
+    <span style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="dismissDraft()" style="font-size:12px;padding:6px 12px">忽略</button>
+      <button class="btn btn-primary" onclick="resumeDraft()" style="font-size:12px;padding:6px 12px">恢復 →</button>
+    </span>
+  </div>
 
   <div class="card">
     <div class="card-title">上傳班表圖片</div>
@@ -347,13 +367,17 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
     <div class="card-title">Gemini API 金鑰</div>
     <div class="form-row">
       <div>
-        <label>API 金鑰（儲存於本機，不上傳）</label>
+        <label>API 金鑰（記住於此裝置，可隨時清除）</label>
         <div style="display:flex;gap:8px">
           <input type="password" id="geminiKey" placeholder="AIzaSy..." style="flex:1">
           <button onclick="toggleKeyVis()" class="btn btn-ghost" style="padding:10px 14px;flex-shrink:0;font-size:16px" title="顯示／隱藏">👁</button>
+          <button onclick="clearKey()" class="btn btn-ghost" style="padding:10px 14px;flex-shrink:0;font-size:16px" title="清除金鑰">🗑</button>
         </div>
         <p style="font-size:11px;color:var(--text-muted);margin-top:7px;font-family:var(--mono)">
           前往 <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent);text-decoration:none">aistudio.google.com</a> 取得免費金鑰
+        </p>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:5px;line-height:1.5">
+          🔒 班表圖片與金鑰會直接傳送給 Google 進行辨識；Gemini 免費層的資料可能被 Google 用於改善產品。金鑰僅存於本裝置瀏覽器。
         </p>
       </div>
     </div>
@@ -382,6 +406,24 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
           <option value="9">9 月</option><option value="10">10 月</option>
           <option value="11">11 月</option><option value="12">12 月</option>
         </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title" onclick="toggleShiftEditor()" style="cursor:pointer;justify-content:space-between">
+      <span style="display:flex;align-items:center;gap:8px">班別時間設定（進階）</span>
+      <span id="shiftCaret" style="font-family:var(--mono);color:var(--text-dim)">▸</span>
+    </div>
+    <div id="shiftEditorBody" class="hidden">
+      <div class="notice">
+        設定每個班別代碼對應的上下班時間。<strong>休假</strong>類（如 RO、AL）勾選「休假」即不建立行程。修改後按「儲存設定」保存於本裝置。
+      </div>
+      <div id="shiftRows"></div>
+      <button class="btn btn-ghost mt-12" onclick="addShiftRow()" style="font-size:13px">＋ 新增班別</button>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="resetShiftPresets()">回復預設</button>
+        <button class="btn btn-primary" onclick="saveShiftPresets()">儲存設定</button>
       </div>
     </div>
   </div>
@@ -420,9 +462,14 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
         <span id="resultName" style="color:var(--text-dim);font-weight:400;letter-spacing:0;margin-left:8px"></span>
       </div>
       <div class="stats-row" id="statsRow"></div>
+      <div id="validateWarn" class="warn-notice hidden">
+        <strong>⚠ 辨識可能有誤：</strong><span id="validateMsg"></span>
+        — 請於下方日曆核對並點格子修正。
+      </div>
       <div id="unknownWarn" class="warn-notice hidden">
         <strong>⚠ 發現未知代碼：</strong><span id="unknownList"></span>
-        — 這些代碼不在系統內，匯出時將自動略過。如需加入，請在格子上修改為已知代碼。
+        — 這些代碼不在班別設定中，<strong>必須先處理才能同步</strong>。請點格子改為已知代碼，或
+        <span onclick="openShiftEditor()" style="color:var(--accent);cursor:pointer;text-decoration:underline">加入班別設定</span>。
       </div>
       <div class="calendar-grid" id="calendarGrid"></div>
       <p class="text-dim mt-12" style="font-size:11px">💡 點擊任何班別格子可直接修改代碼，按 Enter 確認，Esc 取消</p>
@@ -461,8 +508,20 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
         ↑ 同步到 Google 日曆
       </button>
       <p style="font-size:11px;color:var(--text-muted);margin-top:10px;font-family:var(--mono)">
-        同步前自動清除該月舊行程 · 可選擇要寫入的行事曆
+        只更新本工具建立的班次，不影響其他行程 · 可選擇要寫入的行事曆
       </p>
+      <button class="btn btn-ghost mt-12" onclick="downloadIcs()" style="font-size:12px;padding:8px 18px">
+        ⤓ 改用 .ics 下載（OAuth 無法使用時）
+      </button>
+    </div>
+    <!-- Summary (diff confirm) -->
+    <div id="syncSummary" class="hidden" style="text-align:center">
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">本次同步將變更下列班次（其他行程不受影響）</p>
+      <div class="stats-row" id="summaryStats" style="justify-content:center"></div>
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:16px">
+        <button class="btn btn-ghost" onclick="resetSyncUI()" style="font-size:13px;padding:8px 20px">取消</button>
+        <button class="btn btn-green" id="applyBtn" onclick="applyDiff()" style="font-size:13px;padding:8px 24px">套用變更 →</button>
+      </div>
     </div>
     <!-- Picker -->
     <div id="syncPicker" class="hidden" style="text-align:center">
@@ -501,14 +560,16 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
 // ═══════════════════════════════════════════════
 //  CONFIG
 // ═══════════════════════════════════════════════
-const GEMINI_MODEL = 'gemini-3.1-pro-preview';
+const GEMINI_MODEL = 'gemini-3.5-flash';
+const SHIFT_TAG = 'elis-schedule'; // extendedProperties 標記，用於安全同步
 const OAUTH_CLIENT_ID = '263248100982-c6pb7r9o6n0tdl3ek0vurliuqfr8jhc4.apps.googleusercontent.com';
 const OAUTH_SCOPE = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly';
 let gToken = null; // { token, expiry }
 let selectedCalendarId = localStorage.getItem('sched_calendar_id') || null;
 let pendingSyncData = null; // { token, events }
+let pendingDiff = null;     // { token, diff }
 
-const SHIFT_PRESETS = {
+const DEFAULT_SHIFT_PRESETS = {
   'M8':  { label: 'M8',     start: '09:30', end: '18:30', skip: false },
   'MA8': { label: 'MA8',    start: '09:30', end: '16:00', skip: false },
   'M':   { label: 'M',      start: '10:00', end: '19:00', skip: false },
@@ -531,6 +592,16 @@ const SHIFT_PRESETS = {
   'AL':  { label: '年假',    start: '',      end: '',      skip: true  },
   'SL':  { label: '病假',    start: '',      end: '',      skip: true  },
 };
+
+// 使用者自訂班別時間存於 localStorage，載入時與預設合併（自訂覆蓋預設、可新增/刪除）
+function loadPresets() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('sched_shift_presets') || 'null');
+    if (saved && typeof saved === 'object') return saved;
+  } catch (e) { /* ignore */ }
+  return JSON.parse(JSON.stringify(DEFAULT_SHIFT_PRESETS));
+}
+let SHIFT_PRESETS = loadPresets();
 
 // ═══════════════════════════════════════════════
 //  STATE
@@ -578,6 +649,9 @@ const S = {
   document.getElementById('fileInput').addEventListener('change', e => {
     if (e.target.files[0]) handleImageFile(e.target.files[0]);
   });
+
+  // 未完成草稿恢復
+  checkDraft();
 })();
 
 // ═══════════════════════════════════════════════
@@ -598,17 +672,55 @@ function goToStep(n) {
 // ═══════════════════════════════════════════════
 //  IMAGE HANDLING
 // ═══════════════════════════════════════════════
+const MAX_IMG_EDGE = 3000; // 僅在最長邊超過此值才縮圖，避免糊掉密集表格
+
 function handleImageFile(file) {
-  S.imageMime = file.type || 'image/jpeg';
   const reader = new FileReader();
   reader.onload = e => {
-    S.imageBase64 = e.target.result.split(',')[1];
-    document.getElementById('previewImg').src = e.target.result;
-    document.getElementById('scanImg').src = e.target.result;
-    document.getElementById('uploadZone').style.display = 'none';
-    document.getElementById('uploadPreview').style.display = 'block';
+    const dataUrl = e.target.result;
+    const img = new Image();
+    img.onload = () => {
+      // canvas 重繪：校正 EXIF 轉向、解 iPhone HEIC、僅超標才縮小，統一輸出 JPEG
+      let { width, height } = img;
+      const longest = Math.max(width, height);
+      if (longest > MAX_IMG_EDGE) {
+        const scale = MAX_IMG_EDGE / longest;
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      let outUrl;
+      try {
+        outUrl = canvas.toDataURL('image/jpeg', 0.92);
+        S.imageMime = 'image/jpeg';
+        S.imageBase64 = outUrl.split(',')[1];
+      } catch (err) {
+        // canvas 匯出失敗（極少見）→ 退回原圖
+        outUrl = dataUrl;
+        S.imageMime = file.type || 'image/jpeg';
+        S.imageBase64 = dataUrl.split(',')[1];
+      }
+      showPreview(outUrl);
+    };
+    img.onerror = () => {
+      // 無法解碼（例如桌機不支援 HEIC）→ 仍嘗試以原圖上傳
+      S.imageMime = file.type || 'image/jpeg';
+      S.imageBase64 = dataUrl.split(',')[1];
+      showPreview(dataUrl);
+    };
+    img.src = dataUrl;
   };
   reader.readAsDataURL(file);
+}
+
+function showPreview(url) {
+  document.getElementById('previewImg').src = url;
+  document.getElementById('scanImg').src = url;
+  document.getElementById('uploadZone').style.display = 'none';
+  document.getElementById('uploadPreview').style.display = 'block';
+  saveDraft();
 }
 
 // ═══════════════════════════════════════════════
@@ -648,29 +760,45 @@ async function runExtraction() {
   scanLine.style.display = 'block';
   scanOverlay.classList.add('show');
 
-  const prompt = `請仔細分析這張工作班表圖片。
+  const daysInMonth = new Date(S.year, S.month, 0).getDate();
+  const prompt = `請仔細分析這張工作班表圖片。這是 ${S.year} 年 ${S.month} 月的班表，共 ${daysInMonth} 天。
 
 【重要說明】
 - 班表為橫向排列：日期從左至右（第1天→最後一天）
 - 最左欄為員工姓名
-- 頂部行為日期數字（1, 2, 3 ... 最多到31）
+- 頂部行為日期數字（1, 2, 3 ... 到 ${daysInMonth}）
 - 每個格子包含班別代碼（通常為1-3個英文字母，如M、MA、H、E、P、RO等）
 
 【你的任務】
 找到名為「${S.empName}」的員工，提取他/她每一天的班別代碼。
 
 【準確度要求 - 非常重要】
-1. 請由左至右逐欄讀取，不要跳欄
-2. 先確認頂部日期欄位的總數，再逐一對應每格班別代碼
-3. 如果某格為空白，填入 ""（空字串）
-4. RO、AL、CL、SL 等假別代碼，照實回傳
+1. 先確認頂部日期欄位的總數（應為 ${daysInMonth}），填入 daysDetected
+2. 由左至右逐欄讀取，不要跳欄、不要漏欄
+3. 每一天（1 到 ${daysInMonth}）都必須在 schedule 中出現一次，不可重複、不可缺漏
+4. 如果某格為空白，code 填 ""（空字串）
+5. RO、AL、CL、SL 等假別代碼，照實回傳
 
-【回傳格式 - 只回傳 JSON，不要任何說明文字】
-找到員工時：
-{"found":true,"employee":"實際找到的姓名","schedule":[{"date":1,"code":"代碼"},{"date":2,"code":""},...直到月底]}
+找到員工時 found=true 並填 employee 與 schedule；找不到時 found=false 並在 availableNames 列出班表中所有員工姓名。`;
 
-找不到時：
-{"found":false,"availableNames":["姓名1","姓名2",...]}`;
+  const responseSchema = {
+    type: 'object',
+    properties: {
+      found: { type: 'boolean' },
+      employee: { type: 'string' },
+      daysDetected: { type: 'integer' },
+      schedule: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: { date: { type: 'integer' }, code: { type: 'string' } },
+          required: ['date', 'code'],
+        },
+      },
+      availableNames: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['found'],
+  };
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${localStorage.getItem('sched_gemini_key') || ''}`;
@@ -684,28 +812,34 @@ async function runExtraction() {
             { text: prompt },
           ],
         }],
-        generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 4096 },
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema,
+          temperature: 0,
+          maxOutputTokens: 4096,
+          thinkingConfig: { thinkingLevel: 'low' },
+        },
       }),
     });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Gemini API 錯誤 ${res.status}`);
+      throw new Error(explainApiError(res.status, err.error?.message));
     }
 
     const data = await res.json();
-    let raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     scanLine.style.display = 'none';
     scanOverlay.classList.remove('show');
 
-    // Parse JSON (handle possible markdown wrapping)
-    const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) raw = jsonMatch[1].trim();
-    const objMatch = raw.match(/\{[\s\S]*\}/);
-    if (objMatch) raw = objMatch[0];
-
-    renderResult(JSON.parse(raw));
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      throw new Error('AI 回傳格式無法解析，請重新辨識或換一張更清晰的圖。');
+    }
+    renderResult(parsed);
 
   } catch (err) {
     scanLine.style.display = 'none';
@@ -719,6 +853,16 @@ async function runExtraction() {
   }
 }
 
+// Gemini API 錯誤分流，給可理解的處置訊息
+function explainApiError(status, msg) {
+  if (status === 429) return '已達 Gemini 免費額度上限，請稍後再試（通常隔幾分鐘或隔日恢復）。';
+  if (status === 400 && /API key/i.test(msg || '')) return 'API 金鑰無效，請至 Step 1 重新輸入正確的 Gemini 金鑰。';
+  if (status === 403) return 'API 金鑰權限不足或未啟用 Generative Language API。';
+  if (status === 404) return `找不到模型 ${GEMINI_MODEL}，可能已更名。`;
+  if (status >= 500) return 'Gemini 伺服器暫時異常，請稍後重試。';
+  return msg || `Gemini API 錯誤 ${status}`;
+}
+
 // ═══════════════════════════════════════════════
 //  RENDER RESULT
 // ═══════════════════════════════════════════════
@@ -729,24 +873,51 @@ function renderResult(data) {
     document.getElementById('notFoundContent').classList.remove('hidden');
     document.getElementById('notFoundMsg').textContent = `找不到「${S.empName}」。班表中找到以下員工：`;
     const el = document.getElementById('availableNames');
-    el.innerHTML = '<div class="name-chips">' +
-      (data.availableNames || []).map(n =>
-        `<div class="name-chip" onclick="pickName('${n.replace(/'/g,"&#39;")}')">${n}</div>`
-      ).join('') + '</div>';
+    el.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'name-chips';
+    (data.availableNames || []).forEach(n => {
+      const chip = document.createElement('div');
+      chip.className = 'name-chip';
+      chip.textContent = n;                       // textContent：不受 AI 回傳內容注入影響
+      chip.addEventListener('click', () => pickName(n));
+      wrap.appendChild(chip);
+    });
+    el.appendChild(wrap);
     document.getElementById('step2Btns').classList.remove('hidden');
     return;
   }
 
-  S.schedule = (data.schedule || []).map(item => ({
-    ...item,
-    code: item.code ? String(item.code).toUpperCase() : item.code,
-  }));
+  const daysInMonth = new Date(S.year, S.month, 0).getDate();
 
-  // Stats
+  // 只保留範圍內、非重複的日期；code 統一大寫
+  const seen = new Set();
+  S.schedule = (data.schedule || [])
+    .map(item => ({
+      date: Number(item.date),
+      code: item.code ? String(item.code).toUpperCase() : '',
+    }))
+    .filter(item => {
+      if (!(item.date >= 1 && item.date <= daysInMonth)) return false;
+      if (seen.has(item.date)) return false;
+      seen.add(item.date);
+      return true;
+    });
+
+  S.employeeLabel = data.employee || S.empName;
+  renderScheduleView(S.employeeLabel, data.daysDetected);
+}
+
+// 依 S.schedule 渲染 Step 2（辨識結果、草稿恢復、改班別設定後共用）
+function renderScheduleView(employeeLabel, daysDetected) {
+  employeeLabel = employeeLabel || S.employeeLabel || S.empName;
+  const daysInMonth = new Date(S.year, S.month, 0).getDate();
+  const present = new Set(S.schedule.map(d => d.date));
+
   const codeCounts = {};
   S.schedule.forEach(d => { if (d.code) codeCounts[d.code] = (codeCounts[d.code] || 0) + 1; });
   const workDays = S.schedule.filter(d => d.code && !SHIFT_PRESETS[d.code]?.skip && d.code !== '').length;
-  const unknownCodes = [...new Set(S.schedule.map(d => d.code).filter(c => c && !SHIFT_PRESETS[c]))];
+  S.unknownCodes = [...new Set(S.schedule.map(d => d.code).filter(c => c && !SHIFT_PRESETS[c]))];
 
   document.getElementById('statsRow').innerHTML = `
     <div class="stat-chip">共 <span class="val">${S.schedule.length}</span> 天</div>
@@ -755,19 +926,29 @@ function renderResult(data) {
   `;
 
   document.getElementById('resultMonthLabel').textContent = `${S.year}年${S.month}月`;
-  document.getElementById('resultName').textContent = `— ${data.employee}`;
+  document.getElementById('resultName').textContent = `— ${employeeLabel || S.empName}`;
 
-  // Unknown codes warning
-  const warnEl = document.getElementById('unknownWarn');
-  if (unknownCodes.length > 0) {
-    document.getElementById('unknownList').textContent = unknownCodes.join('、');
-    warnEl.classList.remove('hidden');
+  // 交叉驗證：天數完整性、AI 自報天數
+  const missing = [];
+  for (let d = 1; d <= daysInMonth; d++) if (!present.has(d)) missing.push(d);
+  const problems = [];
+  if (missing.length) problems.push(`缺少第 ${missing.join('、')} 天`);
+  if (typeof daysDetected === 'number' && daysDetected !== daysInMonth)
+    problems.push(`AI 判讀本月為 ${daysDetected} 天，實際應為 ${daysInMonth} 天`);
+  const vWarn = document.getElementById('validateWarn');
+  if (problems.length) {
+    document.getElementById('validateMsg').textContent = problems.join('；');
+    vWarn.classList.remove('hidden');
   } else {
-    warnEl.classList.add('hidden');
+    vWarn.classList.add('hidden');
   }
 
+  recomputeUnknown();
   renderCalendar();
+  saveDraft();
 
+  document.getElementById('loadingState').classList.add('hidden');
+  document.getElementById('notFoundContent').classList.add('hidden');
   document.getElementById('resultContent').classList.remove('hidden');
   document.getElementById('step2Btns').classList.remove('hidden');
 }
@@ -815,10 +996,10 @@ function renderCalendar() {
     if (isEmpty) {
       badgeHtml = `<div class="cal-code empty-code">—</div>`;
     } else if (isRest) {
-      badgeHtml = `<div class="cal-code rest">${code}</div>`;
+      badgeHtml = `<div class="cal-code rest">${escapeHtml(code)}</div>`;
     } else {
       const col = codeColor(code);
-      badgeHtml = `<div class="cal-code" style="background:${col}22;color:${col};border:1px solid ${col}44">${code}</div>`;
+      badgeHtml = `<div class="cal-code" style="background:${col}22;color:${col};border:1px solid ${col}44">${escapeHtml(code)}</div>`;
     }
 
     // Time hint
@@ -854,7 +1035,7 @@ function startCalEdit(cell, dateNum) {
     if (entry) entry.code = val;
     else if (val) S.schedule.push({ date: dateNum, code: val });
     cell.classList.remove('editing');
-    renderCalendar();
+    renderScheduleView();
   }
   inp.addEventListener('blur', commit);
   inp.addEventListener('keydown', e => {
@@ -868,6 +1049,18 @@ function pickName(name) {
   S.empName = name;
   localStorage.setItem('sched_name', name);
   goToStep(1);
+}
+
+// 重新計算未知代碼並更新警告（編輯格子或改班別設定後呼叫）
+function recomputeUnknown() {
+  S.unknownCodes = [...new Set((S.schedule || []).map(d => d.code).filter(c => c && !SHIFT_PRESETS[c]))];
+  const warnEl = document.getElementById('unknownWarn');
+  if (S.unknownCodes.length > 0) {
+    document.getElementById('unknownList').textContent = S.unknownCodes.join('、');
+    warnEl.classList.remove('hidden');
+  } else {
+    warnEl.classList.add('hidden');
+  }
 }
 
 // ═══════════════════════════════════════════════
@@ -898,6 +1091,8 @@ function buildEvents() {
       endStr: fmtDt(endDate.getFullYear(), endDate.getMonth() + 1, endDate.getDate(), eh, em),
       startDisplay: cfg.start,
       endDisplay: overnight ? cfg.end + '+1' : cfg.end,
+      rawStart: cfg.start,   // 'HH:MM'，用於差異比對
+      rawEnd: cfg.end,
       jsDate: new Date(S.year, S.month - 1, date),
     });
   }
@@ -917,8 +1112,8 @@ function buildExportPreview() {
   document.getElementById('eventPreview').innerHTML = show.map(ev => `
     <div class="event-item">
       <div class="event-date">${S.month}/${ev.date} (${DAY_NAMES[ev.jsDate.getDay()]})</div>
-      <div class="event-code" style="background:${codeColor(ev.code)}22;color:${codeColor(ev.code)}">${ev.code}</div>
-      <div class="event-label">${ev.label}</div>
+      <div class="event-code" style="background:${codeColor(ev.code)}22;color:${codeColor(ev.code)}">${escapeHtml(ev.code)}</div>
+      <div class="event-label">${escapeHtml(ev.label)}</div>
       <div class="event-time">${ev.startDisplay} — ${ev.endDisplay}</div>
     </div>
   `).join('');
@@ -927,6 +1122,16 @@ function buildExportPreview() {
     events.length > 10 ? `… 還有 ${events.length - 10} 個班次` : '';
 
   resetSyncUI();
+
+  // 未知代碼未處理時停用同步
+  const btn = document.getElementById('syncBtn');
+  if (S.unknownCodes && S.unknownCodes.length) {
+    btn.disabled = true;
+    btn.textContent = `⚠ 請先處理未知代碼：${S.unknownCodes.join('、')}`;
+  } else {
+    btn.disabled = false;
+    btn.textContent = '↑ 同步到 Google 日曆';
+  }
 }
 
 // ═══════════════════════════════════════════════
@@ -938,11 +1143,13 @@ function resetSyncUI() {
   if (btn) { btn.disabled = false; btn.textContent = '↑ 同步到 Google 日曆'; }
   document.getElementById('syncIdle').classList.remove('hidden');
   document.getElementById('syncPicker').classList.add('hidden');
+  document.getElementById('syncSummary').classList.add('hidden');
   document.getElementById('syncProgress').classList.add('hidden');
   document.getElementById('syncDone').classList.add('hidden');
   document.getElementById('syncLog').innerHTML = '';
   document.getElementById('syncFill').style.width = '0%';
   pendingSyncData = null;
+  pendingDiff = null;
 }
 
 function logLine(id, mark, text, cls) {
@@ -973,10 +1180,11 @@ function getToken() {
   });
 }
 
-async function clearMonthEvents(token) {
+// 列出當月「本工具建立」的事件（有標記，或舊版 description 以「班別代碼：」開頭）。私人行程一律不含。
+async function listToolEvents(token) {
   const timeMin = new Date(S.year, S.month - 1, 1).toISOString();
   const timeMax = new Date(S.year, S.month, 1).toISOString();
-  const ids = [];
+  const out = [];
   let pageToken = '';
 
   do {
@@ -987,27 +1195,63 @@ async function clearMonthEvents(token) {
     url.searchParams.set('singleEvents', 'true');
     if (pageToken) url.searchParams.set('pageToken', pageToken);
 
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetchRetry(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) {
       const e = await res.json().catch(() => ({}));
       throw new Error(e.error?.message || `列出行程失敗 (${res.status})`);
     }
     const data = await res.json();
-    (data.items || []).forEach(e => ids.push(e.id));
+    (data.items || []).forEach(e => {
+      const priv = e.extendedProperties?.private;
+      const isTagged = priv?.shiftSync === SHIFT_TAG;
+      const isLegacy = (e.description || '').startsWith('班別代碼：');
+      if (!isTagged && !isLegacy) return; // 私人行程略過
+
+      // 推得日期：標記優先，否則從事件開始時間
+      let day = priv?.day ? Number(priv.day) : null;
+      if (!day && e.start?.dateTime) day = new Date(e.start.dateTime).getDate();
+      out.push({ id: e.id, day, code: priv?.code || '', st: priv?.st || '', en: priv?.en || '', legacy: !isTagged });
+    });
     pageToken = data.nextPageToken || '';
   } while (pageToken);
 
-  for (const id of ids) {
-    const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(selectedCalendarId)}/events/${id}`,
-      { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!res.ok && res.status !== 410) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.error?.message || `刪除行程失敗 (${res.status})`);
-    }
+  return out;
+}
+
+async function deleteGoogleEvent(token, id) {
+  const res = await fetchRetry(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(selectedCalendarId)}/events/${id}`,
+    { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok && res.status !== 410 && res.status !== 404) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error?.message || `刪除行程失敗 (${res.status})`);
   }
-  return ids.length;
+}
+
+// 比對既有工具事件與目標班次，算出新增/修改/刪除/不變
+function diffEvents(existing, targets) {
+  const exByDay = new Map();
+  existing.forEach(e => {
+    // 同一天可能有舊版重複，保留第一筆、其餘標記為待刪
+    if (e.day && !exByDay.has(e.day)) exByDay.set(e.day, e);
+    else if (e.day) exByDay.set('dup_' + e.id, e);
+  });
+  const add = [], modify = [], unchanged = [];
+  const usedIds = new Set();
+
+  targets.forEach(ev => {
+    const cur = exByDay.get(ev.date);
+    if (!cur) { add.push(ev); return; }
+    usedIds.add(cur.id);
+    const same = !cur.legacy && cur.code === ev.code && cur.st === ev.rawStart && cur.en === ev.rawEnd;
+    if (same) unchanged.push(ev);
+    else modify.push({ ev, id: cur.id });
+  });
+
+  // 既有工具事件中，未對應到任何目標班次者 → 刪除（含當天已改休假/空白、舊版重複）
+  const del = existing.filter(e => !usedIds.has(e.id));
+  return { add, modify, del, unchanged };
 }
 
 function isoFromIcal(s) {
@@ -1015,19 +1259,26 @@ function isoFromIcal(s) {
   return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T${s.slice(9,11)}:${s.slice(11,13)}:00`;
 }
 
-async function createGoogleEvent(token, ev) {
-  const body = {
+function eventBody(ev) {
+  return {
     summary: ev.label,
     description: `班別代碼：${ev.code}`,
     start: { dateTime: isoFromIcal(ev.startStr), timeZone: 'Asia/Taipei' },
     end:   { dateTime: isoFromIcal(ev.endStr),   timeZone: 'Asia/Taipei' },
+    extendedProperties: { private: {
+      shiftSync: SHIFT_TAG, emp: S.empName, day: String(ev.date),
+      code: ev.code, st: ev.rawStart, en: ev.rawEnd,
+    } },
   };
-  const res = await fetch(
+}
+
+async function createGoogleEvent(token, ev) {
+  const res = await fetchRetry(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(selectedCalendarId)}/events`,
     {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(eventBody(ev)),
     }
   );
   if (!res.ok) {
@@ -1036,7 +1287,45 @@ async function createGoogleEvent(token, ev) {
   }
 }
 
+async function updateGoogleEvent(token, id, ev) {
+  const res = await fetchRetry(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(selectedCalendarId)}/events/${id}`,
+    {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(eventBody(ev)),
+    }
+  );
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error?.message || `更新行程失敗 (${res.status})`);
+  }
+}
+
+// fetch 包裝：對 429 / 5xx 指數退避重試，避免暫時性錯誤造成半套同步
+async function fetchRetry(url, opts, tries = 4) {
+  let delay = 600;
+  for (let i = 0; i < tries; i++) {
+    let res;
+    try {
+      res = await fetch(url, opts);
+    } catch (netErr) {
+      if (i === tries - 1) throw netErr;
+      await new Promise(r => setTimeout(r, delay)); delay *= 2; continue;
+    }
+    if ((res.status === 429 || res.status >= 500) && i < tries - 1) {
+      await new Promise(r => setTimeout(r, delay)); delay *= 2; continue;
+    }
+    return res;
+  }
+}
+
 async function syncToGoogle() {
+  if (S.unknownCodes && S.unknownCodes.length) {
+    toast(`請先處理未知代碼：${S.unknownCodes.join('、')}`, 'error');
+    goToStep(2);
+    return;
+  }
   const events = buildEvents();
   if (!events.length) { toast('沒有可同步的班次', 'error'); return; }
 
@@ -1051,7 +1340,7 @@ async function syncToGoogle() {
     pendingSyncData = { token, events };
     showCalendarPicker(calendars);
   } catch (err) {
-    toast(err.message, 'error');
+    toast(err.message + '（可改用下方 .ics 下載）', 'error');
     btn.disabled = false;
     btn.textContent = '↑ 同步到 Google 日曆';
   }
@@ -1099,25 +1388,35 @@ async function confirmCalendarAndSync() {
   document.getElementById('syncProgress').classList.remove('hidden');
 
   try {
-    logLine('clear', '…', `清除 ${S.year}/${pad(S.month)} 舊行程…`, 's-spin');
-    const cleared = await clearMonthEvents(token);
-    logLine('clear', '✓', `已清除 ${cleared} 筆舊行程`, 's-done');
+    logLine('scan', '…', '分析既有班次差異…', 's-spin');
+    const existing = await listToolEvents(token);
+    const diff = diffEvents(existing, events);
+    logLine('scan', '✓',
+      `新增 ${diff.add.length}、修改 ${diff.modify.length}、刪除 ${diff.del.length}、不變 ${diff.unchanged.length}`,
+      's-done');
 
-    logLine('create', '…', `寫入 0 / ${events.length} 個班次…`, 's-spin');
-    for (let i = 0; i < events.length; i++) {
-      await createGoogleEvent(token, events[i]);
-      document.getElementById('syncFill').style.width = `${Math.round((i + 1) / events.length * 100)}%`;
-      logLine('create', '…', `寫入 ${i + 1} / ${events.length} 個班次…`, 's-spin');
+    pendingDiff = { token, diff, calName };
+
+    if (!diff.add.length && !diff.modify.length && !diff.del.length) {
+      // 全部相同，無需變更
+      document.getElementById('syncProgress').classList.add('hidden');
+      document.getElementById('syncDone').classList.remove('hidden');
+      document.getElementById('syncDoneMsg').textContent =
+        `${S.year}年${S.month}月 · 班次已是最新，無需變更（${calName}）`;
+      toast('✓ 已是最新，無需同步', 'success');
+      pendingDiff = null;
+      return;
     }
-    logLine('create', '✓', `已寫入 ${events.length} 個班次`, 's-done');
 
-    document.getElementById('syncFill').style.width = '100%';
-    await new Promise(r => setTimeout(r, 400));
+    // 顯示摘要讓使用者確認
     document.getElementById('syncProgress').classList.add('hidden');
-    document.getElementById('syncDone').classList.remove('hidden');
-    document.getElementById('syncDoneMsg').textContent =
-      `${S.year}年${S.month}月 · ${events.length} 個班次已同步到「${calName}」`;
-    toast(`✓ 同步完成，共 ${events.length} 個班次`, 'success');
+    document.getElementById('summaryStats').innerHTML = `
+      <div class="stat-chip">新增 <span class="val">${diff.add.length}</span></div>
+      <div class="stat-chip">修改 <span class="val">${diff.modify.length}</span></div>
+      <div class="stat-chip">刪除 <span class="val">${diff.del.length}</span></div>
+      <div class="stat-chip">不變 <span class="val">${diff.unchanged.length}</span></div>
+    `;
+    document.getElementById('syncSummary').classList.remove('hidden');
 
   } catch (err) {
     logLine('err', '✗', err.message, 's-err');
@@ -1126,10 +1425,99 @@ async function confirmCalendarAndSync() {
   }
 }
 
+async function applyDiff() {
+  if (!pendingDiff) return;
+  const { token, diff, calName } = pendingDiff;
+  pendingDiff = null;
+
+  document.getElementById('syncSummary').classList.add('hidden');
+  document.getElementById('syncProgress').classList.remove('hidden');
+
+  const total = diff.add.length + diff.modify.length + diff.del.length;
+  let done = 0;
+  const tick = () => {
+    done++;
+    document.getElementById('syncFill').style.width = `${Math.round(done / total * 100)}%`;
+  };
+
+  try {
+    // 先新增／修改（成功後才刪除，避免中途失敗留下空窗）
+    if (diff.add.length || diff.modify.length) {
+      const w = diff.add.length + diff.modify.length;
+      logLine('write', '…', `寫入 0 / ${w} 個班次…`, 's-spin');
+      let n = 0;
+      for (const ev of diff.add)          { await createGoogleEvent(token, ev);        n++; tick(); logLine('write', '…', `寫入 ${n} / ${w} 個班次…`, 's-spin'); }
+      for (const m of diff.modify)        { await updateGoogleEvent(token, m.id, m.ev); n++; tick(); logLine('write', '…', `寫入 ${n} / ${w} 個班次…`, 's-spin'); }
+      logLine('write', '✓', `已寫入／更新 ${w} 個班次`, 's-done');
+    }
+
+    if (diff.del.length) {
+      logLine('del', '…', `刪除 ${diff.del.length} 個失效班次…`, 's-spin');
+      for (const e of diff.del) { await deleteGoogleEvent(token, e.id); tick(); }
+      logLine('del', '✓', `已刪除 ${diff.del.length} 個失效班次`, 's-done');
+    }
+
+    document.getElementById('syncFill').style.width = '100%';
+    await new Promise(r => setTimeout(r, 400));
+    document.getElementById('syncProgress').classList.add('hidden');
+    document.getElementById('syncDone').classList.remove('hidden');
+    document.getElementById('syncDoneMsg').textContent =
+      `${S.year}年${S.month}月 · 新增 ${diff.add.length}／修改 ${diff.modify.length}／刪除 ${diff.del.length}（${calName}）`;
+    toast('✓ 同步完成', 'success');
+    clearDraft();
+
+  } catch (err) {
+    logLine('err', '✗', err.message, 's-err');
+    setTimeout(resetSyncUI, 3000);
+    console.error(err);
+  }
+}
+
+// ── .ics 備援：OAuth 無法使用時可下載匯入任何日曆 ──
+function downloadIcs() {
+  if (S.unknownCodes && S.unknownCodes.length) {
+    toast(`請先處理未知代碼：${S.unknownCodes.join('、')}`, 'error');
+    goToStep(2);
+    return;
+  }
+  const events = buildEvents();
+  if (!events.length) { toast('沒有可匯出的班次', 'error'); return; }
+
+  const dtstamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  const esc = s => String(s).replace(/([,;\\])/g, '\\$1');
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//elis-schedule//TW', 'CALSCALE:GREGORIAN'];
+  events.forEach(ev => {
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${SHIFT_TAG}-${S.year}${pad(S.month)}${pad(ev.date)}-${ev.code}@local`,
+      `DTSTAMP:${dtstamp}`,
+      `DTSTART;TZID=Asia/Taipei:${ev.startStr}`,
+      `DTEND;TZID=Asia/Taipei:${ev.endStr}`,
+      `SUMMARY:${esc(ev.label)}`,
+      `DESCRIPTION:${esc('班別代碼：' + ev.code)}`,
+      'END:VEVENT'
+    );
+  });
+  lines.push('END:VCALENDAR');
+
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `班表_${S.empName}_${S.year}${pad(S.month)}.ics`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+  toast('✓ 已產生 .ics，開啟即可匯入日曆', 'success');
+}
+
 // ═══════════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════════
 function pad(n) { return String(n).padStart(2, '0'); }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
 function fmtDt(y, mo, d, h, m) { return `${y}${pad(mo)}${pad(d)}T${pad(h)}${pad(m)}00`; }
 
 function codeColor(code) {
@@ -1149,6 +1537,164 @@ function codeColor(code) {
 function toggleKeyVis() {
   const inp = document.getElementById('geminiKey');
   inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+function clearKey() {
+  localStorage.removeItem('sched_gemini_key');
+  document.getElementById('geminiKey').value = '';
+  toast('已清除本裝置的 API 金鑰', 'success');
+}
+
+// ═══════════════════════════════════════════════
+//  SHIFT PRESET EDITOR
+// ═══════════════════════════════════════════════
+let shiftEditorBuilt = false;
+
+function toggleShiftEditor() {
+  const body = document.getElementById('shiftEditorBody');
+  const open = body.classList.toggle('hidden') === false;
+  document.getElementById('shiftCaret').textContent = open ? '▾' : '▸';
+  if (open && !shiftEditorBuilt) { renderShiftEditor(); shiftEditorBuilt = true; }
+}
+
+function renderShiftEditor() {
+  const wrap = document.getElementById('shiftRows');
+  wrap.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'shift-head';
+  wrap.appendChild(head);
+  Object.keys(SHIFT_PRESETS).forEach(code => wrap.appendChild(makeShiftRow(code, SHIFT_PRESETS[code])));
+}
+
+function makeShiftRow(code, cfg) {
+  cfg = cfg || { label: '', start: '', end: '', skip: false };
+  const row = document.createElement('div');
+  row.className = 'shift-row';
+
+  const mkField = (labelText, cls, type, value, ph, maxlen) => {
+    const f = document.createElement('div'); f.className = 'f ' + cls;
+    const s = document.createElement('small'); s.textContent = labelText;
+    const i = document.createElement('input'); i.type = type; i.value = value || '';
+    if (ph) i.placeholder = ph; if (maxlen) i.maxLength = maxlen;
+    i.className = 'sf-' + cls;
+    f.appendChild(s); f.appendChild(i); return f;
+  };
+
+  row.appendChild(mkField('代碼', 'code', 'text', code, 'M', 6));
+  row.appendChild(mkField('顯示名稱', 'label', 'text', cfg.label, code));
+  row.appendChild(mkField('上班', 'start', 'time', cfg.start));
+  row.appendChild(mkField('下班', 'end', 'time', cfg.end));
+
+  const sk = document.createElement('label'); sk.className = 'skipwrap';
+  const skcb = document.createElement('input'); skcb.type = 'checkbox'; skcb.className = 'sf-skip'; skcb.checked = !!cfg.skip;
+  sk.appendChild(skcb); sk.appendChild(document.createTextNode('休假'));
+  row.appendChild(sk);
+
+  const del = document.createElement('button'); del.className = 'del'; del.type = 'button';
+  del.textContent = '🗑'; del.title = '刪除'; del.onclick = () => row.remove();
+  row.appendChild(del);
+  return row;
+}
+
+function addShiftRow(prefillCode) {
+  if (!shiftEditorBuilt) { renderShiftEditor(); shiftEditorBuilt = true; }
+  const row = makeShiftRow(prefillCode || '', null);
+  document.getElementById('shiftRows').appendChild(row);
+  row.querySelector('.sf-code').focus();
+  return row;
+}
+
+function saveShiftPresets() {
+  const rows = document.querySelectorAll('#shiftRows .shift-row');
+  const out = {};
+  for (const row of rows) {
+    const code = row.querySelector('.sf-code').value.trim().toUpperCase();
+    if (!code) continue;
+    if (out[code]) { toast(`代碼重複：${code}`, 'error'); return; }
+    const skip = row.querySelector('.sf-skip').checked;
+    const start = row.querySelector('.sf-start').value;
+    const end = row.querySelector('.sf-end').value;
+    if (!skip && (!start || !end)) { toast(`${code} 需填上下班時間，或勾選休假`, 'error'); return; }
+    out[code] = {
+      label: row.querySelector('.sf-label').value.trim() || code,
+      start: skip ? '' : start,
+      end: skip ? '' : end,
+      skip,
+    };
+  }
+  if (!Object.keys(out).length) { toast('至少需保留一個班別', 'error'); return; }
+  localStorage.setItem('sched_shift_presets', JSON.stringify(out));
+  SHIFT_PRESETS = loadPresets();
+  toast('✓ 班別設定已儲存', 'success');
+  // 若已有辨識結果，重新驗證未知代碼與日曆
+  if (S.schedule && S.schedule.length) renderScheduleView();
+}
+
+function resetShiftPresets() {
+  localStorage.removeItem('sched_shift_presets');
+  SHIFT_PRESETS = loadPresets();
+  renderShiftEditor();
+  if (S.schedule && S.schedule.length) renderScheduleView();
+  toast('已回復預設班別', 'success');
+}
+
+// 從未知代碼警告開啟編輯器，並為每個未知代碼預建一列
+function openShiftEditor() {
+  goToStep(1);
+  const body = document.getElementById('shiftEditorBody');
+  if (body.classList.contains('hidden')) toggleShiftEditor();
+  (S.unknownCodes || []).forEach(code => {
+    const exists = [...document.querySelectorAll('#shiftRows .sf-code')].some(i => i.value.trim().toUpperCase() === code);
+    if (!exists) addShiftRow(code);
+  });
+  document.getElementById('shiftEditorBody').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ═══════════════════════════════════════════════
+//  DRAFT (未完成草稿恢復)
+// ═══════════════════════════════════════════════
+function saveDraft() {
+  try {
+    localStorage.setItem('sched_draft', JSON.stringify({
+      empName: S.empName, year: S.year, month: S.month,
+      schedule: S.schedule, imageMime: S.imageMime, ts: Date.now(),
+    }));
+  } catch (e) { /* localStorage 滿或無法用時忽略 */ }
+}
+
+function clearDraft() { localStorage.removeItem('sched_draft'); }
+
+// 開頁時若有未完成草稿，顯示恢復橫幅（不自動套用）
+function checkDraft() {
+  let d;
+  try { d = JSON.parse(localStorage.getItem('sched_draft') || 'null'); } catch (e) { return; }
+  if (!d || !d.schedule || !d.schedule.length) return;
+  const b = document.getElementById('restoreBanner');
+  document.getElementById('restoreMsg').textContent =
+    `偵測到上次未完成的班表（${d.year}年${d.month}月 · ${d.empName || '未命名'}），是否恢復？`;
+  b.classList.remove('hidden');
+}
+
+function resumeDraft() {
+  let d;
+  try { d = JSON.parse(localStorage.getItem('sched_draft') || 'null'); } catch (e) { return; }
+  if (!d) return;
+  S.empName = d.empName || S.empName;
+  S.year = d.year || S.year;
+  S.month = d.month || S.month;
+  S.schedule = d.schedule || [];
+  S.employeeLabel = S.empName;
+  document.getElementById('selYear').value = S.year;
+  document.getElementById('selMonth').value = S.month;
+  if (S.empName) document.getElementById('empName').value = S.empName;
+  document.getElementById('restoreBanner').classList.add('hidden');
+  goToStep(2);
+  renderScheduleView();
+}
+
+function dismissDraft() {
+  clearDraft();
+  document.getElementById('restoreBanner').classList.add('hidden');
 }
 
 function toast(msg, type = '') {
