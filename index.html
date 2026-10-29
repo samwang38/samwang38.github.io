@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#080a0e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="我的班表">
+<meta name="referrer" content="no-referrer">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-192.png">
 <title>班表 → 行事曆</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -314,6 +320,41 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
   .export-how { padding: 14px; }
   .how-step { font-size: 12px; }
 }
+/* Personal workflow: keep the monthly task prominent, settings quiet. */
+.eyebrow { color:var(--accent); font:500 10px var(--mono); letter-spacing:.18em; margin-bottom:12px; }
+.profile-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:-8px 0 22px; color:var(--text-dim); font-size:13px; line-height:1.7; }
+.text-button { border:0; background:none; color:var(--accent); cursor:pointer; font:inherit; padding:8px 0; text-decoration:none; flex-shrink:0; }
+.settings-btn { min-height:40px; padding:7px 12px; font-size:12px; }
+details > summary { cursor:pointer; font-size:15px; font-weight:500; padding:4px 0; color:var(--text); }
+details > summary span { font-size:12px; color:var(--text-dim); font-weight:400; margin-left:8px; }
+details[open] > summary { margin-bottom:24px; }
+.personal-settings .card { padding:16px 0; border:0; background:transparent; }
+.field-note { font-size:12px; line-height:1.7; color:var(--text-dim); margin-top:8px; }
+.clipboard-btn { width:100%; margin-top:14px; }
+.primary-action { margin:20px 0 28px; }
+.primary-action .btn { width:100%; min-height:54px; font-family:var(--sans); font-size:16px; letter-spacing:0; }
+.shortcut-guide { background:transparent; }
+.shortcut-guide p { margin:16px 0; font-size:13px; line-height:1.9; color:var(--text-dim); }
+.shortcut-guide .text-button { display:inline-block; margin-left:12px; }
+textarea { width:100%; padding:12px; background:var(--panel); color:var(--text); border:1px solid var(--border-hi); border-radius:8px; font:16px var(--sans); margin-bottom:12px; resize:vertical; }
+#pasteFallback { margin-top:16px; }
+.period-card .form-row.cols-2 { grid-template-columns:1fr 1fr; }
+.btn:focus-visible, summary:focus-visible, .text-button:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+.scan-container img { max-height:360px; }
+@media(max-width:600px) {
+  main { padding-top:26px; }
+  h2 { font-size:26px; letter-spacing:-.03em; }
+  .card { padding:20px 16px; }
+  .profile-bar { align-items:flex-start; font-size:12px; }
+  input[type=text],input[type=password],input[type=time],select { font-size:16px; min-height:44px; }
+  .btn,.text-button,summary { min-height:44px; }
+  .btn-row { flex-wrap:wrap; }
+  #step2Btns .btn-primary { width:100%; order:-1; }
+  .cal-cell { min-height:70px; padding:8px 3px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
+}
 </style>
 </head>
 <body>
@@ -327,15 +368,18 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
     <div class="step-connector"></div>
     <div class="step-dot" id="nav3"><div class="num">3</div><span class="step-label">匯出行事曆</span></div>
   </div>
-  <div class="ver-badge">v1.4.0</div>
+  <button class="btn btn-ghost settings-btn" onclick="openPersonalSettings()" aria-label="開啟個人設定">設定</button>
 </header>
 
 <main>
 
 <!-- ╔══════════════ STEP 1 ══════════════╗ -->
 <section class="step-section active" id="s1">
-  <h2>上傳班表</h2>
-  <p class="sub">上傳班表圖片，輸入您的姓名與班表月份，即可開始 AI 辨識。</p>
+  <div class="eyebrow">YOUR MONTH, AT A GLANCE</div>
+  <h2>這個月，怎麼上班？</h2>
+  <p class="sub">選一張班表，核對後就能同步到行事曆。</p>
+  <div class="profile-bar"><span id="profileSummary">先設定姓名與 Gemini 金鑰，之後只需選圖。</span><button class="text-button" onclick="openPersonalSettings()">編輯設定</button></div>
+  <div class="notice hidden" id="shortcutArrival" role="status"><strong>已從分享捷徑開啟。</strong>點下方「匯入捷徑班表」，允許貼上即可接收圖片。</div>
 
   <div id="restoreBanner" class="notice hidden" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
     <span id="restoreMsg" style="flex:1;min-width:180px"></span>
@@ -348,7 +392,7 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
   <div class="card">
     <div class="card-title">上傳班表圖片</div>
     <div class="notice">
-      <strong>準確度建議：</strong>請上傳清晰截圖（PNG/JPG），確保橫向完整顯示所有日期欄位。
+      請保留姓名與完整日期欄，使用原始截圖會更容易核對。
     </div>
     <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
       <div class="icon">📋</div>
@@ -361,20 +405,28 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
       <div class="preview-change" onclick="document.getElementById('fileInput').click()">更換圖片</div>
     </div>
     <input type="file" id="fileInput" accept="image/*">
+    <button class="btn btn-ghost clipboard-btn" id="importClipboardBtn" onclick="importClipboardImage()">匯入捷徑班表</button>
+    <div class="hidden" id="pasteFallback">
+      <label for="sharedImageText">若瀏覽器無法自動貼上，請長按下方欄位並選擇「貼上」</label>
+      <textarea id="sharedImageText" rows="2" placeholder="在這裡貼上捷徑準備的班表"></textarea>
+      <button class="btn btn-ghost" onclick="importSharedText(document.getElementById('sharedImageText').value)">匯入已貼上的班表</button>
+    </div>
   </div>
 
-  <div class="card">
+  <details class="card personal-settings" id="personalSettings" open>
+    <summary>個人設定 <span>只需設定一次</span></summary>
+  <div>
     <div class="card-title">Gemini API 金鑰</div>
     <div class="form-row">
       <div>
-        <label>API 金鑰（記住於此裝置，可隨時清除）</label>
+        <label for="geminiKey">API 金鑰（儲存在此瀏覽器）</label>
         <div style="display:flex;gap:8px">
-          <input type="password" id="geminiKey" placeholder="AIzaSy..." style="flex:1">
+          <input type="password" id="geminiKey" placeholder="AIzaSy..." autocomplete="off" style="flex:1;min-width:0">
           <button onclick="toggleKeyVis()" class="btn btn-ghost" style="padding:10px 14px;flex-shrink:0;font-size:16px" title="顯示／隱藏">👁</button>
           <button onclick="clearKey()" class="btn btn-ghost" style="padding:10px 14px;flex-shrink:0;font-size:16px" title="清除金鑰">🗑</button>
         </div>
         <p style="font-size:11px;color:var(--text-muted);margin-top:7px;font-family:var(--mono)">
-          前往 <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent);text-decoration:none">aistudio.google.com</a> 取得免費金鑰
+          前往 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none">Google AI Studio</a> 管理金鑰與額度
         </p>
         <p style="font-size:11px;color:var(--text-muted);margin-top:5px;line-height:1.5">
           🔒 班表圖片與金鑰會直接傳送給 Google 進行辨識；Gemini 免費層的資料可能被 Google 用於改善產品。金鑰僅存於本裝置瀏覽器。
@@ -383,30 +435,22 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
     </div>
   </div>
 
-  <div class="card">
+  <div>
     <div class="card-title">員工資訊</div>
     <div class="form-row">
       <div>
-        <label>您在班表上的姓名</label>
+        <label for="empName">您在班表上的姓名</label>
         <input type="text" id="empName" placeholder="請輸入完整姓名，如：Wilson LIU">
       </div>
     </div>
-    <div class="form-row cols-2">
-      <div>
-        <label>班表年份</label>
-        <select id="selYear"></select>
-      </div>
-      <div>
-        <label>班表月份</label>
-        <select id="selMonth">
-          <option value="1">1 月</option><option value="2">2 月</option>
-          <option value="3">3 月</option><option value="4">4 月</option>
-          <option value="5">5 月</option><option value="6">6 月</option>
-          <option value="7">7 月</option><option value="8">8 月</option>
-          <option value="9">9 月</option><option value="10">10 月</option>
-          <option value="11">11 月</option><option value="12">12 月</option>
-        </select>
-      </div>
+    <div class="form-row">
+      <label for="geminiModel">辨識模型</label>
+      <select id="geminiModel">
+        <option value="gemini-3.8-flash">Gemini 3.8 Flash · 建議</option>
+        <option value="gemini-3.6-flash">Gemini 3.6 Flash · 保留版本</option>
+        <option value="gemini-4-argon">Gemini 4 Argon · 新版旗艦，費率較高</option>
+      </select>
+      <p class="field-note">模型是否可用取決於你的 API 專案。每次只使用選定模型，不會自動改用其他模型。</p>
     </div>
   </div>
 
@@ -428,15 +472,37 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
     </div>
   </div>
 
-  <div class="btn-row">
-    <button class="btn btn-primary" onclick="startExtraction()">開始 AI 分析 →</button>
+    <button class="btn btn-primary" onclick="savePersonalSettings()">儲存個人設定</button>
+  </details>
+
+  <div class="card period-card">
+    <div class="card-title">班表月份</div>
+    <div class="form-row cols-2">
+      <div><label for="selYear">年份</label><select id="selYear"></select></div>
+      <div><label for="selMonth">月份</label><select id="selMonth">
+        <option value="1">1 月</option><option value="2">2 月</option><option value="3">3 月</option><option value="4">4 月</option>
+        <option value="5">5 月</option><option value="6">6 月</option><option value="7">7 月</option><option value="8">8 月</option>
+        <option value="9">9 月</option><option value="10">10 月</option><option value="11">11 月</option><option value="12">12 月</option>
+      </select></div>
+    </div>
+    <p class="field-note">先選預期月份；圖片上有清楚的年月時，會以辨識結果帶入，並提醒你核對。</p>
   </div>
+  <div class="btn-row primary-action">
+    <button class="btn btn-primary" id="startExtractionBtn" onclick="startExtraction()">辨識我的班表 →</button>
+  </div>
+  <details class="card shortcut-guide"><summary>從 iPhone 照片直接分享班表</summary>
+    <p>安裝捷徑後，在「照片」選一張班表 → 分享 →「班表轉行事曆」→ 回到工具點「匯入捷徑班表」。</p>
+    <a class="btn btn-ghost" href="./shortcuts/班表轉行事曆.shortcut">下載分享捷徑</a>
+    <a class="text-button" href="./shortcuts/使用說明.html" target="_blank" rel="noopener noreferrer">安裝與使用說明 ↗</a>
+    <p class="field-note">也可以在 Safari 分享選單選「加入主畫面」，下次從桌面開啟。捷徑會覆寫剪貼簿；匯入後，圖片只保留在此瀏覽器，按下辨識才傳送給 Google。</p>
+  </details>
 </section>
 
 <!-- ╔══════════════ STEP 2 ══════════════╗ -->
 <section class="step-section" id="s2">
   <h2>確認班別</h2>
   <p class="sub">請核對 AI 辨識的結果是否正確。點擊任何日期格子可直接修改班別代碼。</p>
+  <div class="notice hidden" id="detectedPeriodNotice" role="status"></div>
 
   <div class="card">
     <div class="card-title">班表圖片</div>
@@ -476,8 +542,12 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
     </div>
 
     <div id="notFoundContent" class="hidden">
-      <div class="card-title" style="color:var(--red)">找不到此員工</div>
+      <div class="card-title" id="extractionErrorTitle" style="color:var(--red)">找不到此員工</div>
       <p style="font-size:13px;color:var(--text-dim)" id="notFoundMsg"></p>
+      <p id="billingHelp" class="hidden mt-12" style="font-size:13px;line-height:1.7;color:var(--text-dim)">
+        請前往 <a href="https://ai.studio/projects" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Google AI Studio 專案與帳務管理 ↗</a>，
+        確認目前 API 金鑰所屬專案的帳務帳戶與預付餘額。補足額度後再按「重新辨識」；若改用其他有可用額度的專案，請回上傳頁更換金鑰。同一個餘額耗盡的帳務帳戶下，更換金鑰仍無法恢復。
+      </p>
       <div id="availableNames"></div>
     </div>
   </div>
@@ -485,14 +555,14 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
   <div class="btn-row hidden" id="step2Btns">
     <button class="btn btn-ghost" onclick="goToStep(1)">← 重新上傳</button>
     <button class="btn btn-ghost" onclick="reExtract()">🔄 重新辨識</button>
-    <button class="btn btn-primary" onclick="goToStep(3)">確認，匯出行事曆 →</button>
+    <button class="btn btn-primary" id="confirmExtractionBtn" onclick="goToStep(3)" disabled>確認，匯出行事曆 →</button>
   </div>
 </section>
 
 <!-- ╔══════════════ STEP 3 ══════════════╗ -->
 <section class="step-section" id="s3">
   <h2>同步行事曆</h2>
-  <p class="sub">確認班次無誤後，點擊同步按鈕直接寫入 Google 日曆。同步前會自動清除該月舊行程，避免重複。</p>
+  <p class="sub">先比對當月班次，確認變更後再同步；只更新本工具建立的行程。</p>
 
   <div class="card">
     <div class="card-title">班次摘要</div>
@@ -560,10 +630,18 @@ button, .cal-cell, .name-chip { touch-action: manipulation; }
 // ═══════════════════════════════════════════════
 //  CONFIG
 // ═══════════════════════════════════════════════
-const GEMINI_MODEL = 'gemini-3.5-flash';
+const GEMINI_MODEL = 'gemini-3.8-flash';
+const SUPPORTED_MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-4-argon'];
+function selectedModel() {
+  const value = document.getElementById('geminiModel').value;
+  return SUPPORTED_MODELS.includes(value) ? value : GEMINI_MODEL;
+}
+const EXTRACTION_TIMEOUT_MS = 90000;
 const SHIFT_TAG = 'elis-schedule'; // extendedProperties 標記，用於安全同步
 const OAUTH_CLIENT_ID = '263248100982-c6pb7r9o6n0tdl3ek0vurliuqfr8jhc4.apps.googleusercontent.com';
 const OAUTH_SCOPE = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly';
+let draftDBPromise;
+let draftWriteQueue = Promise.resolve();
 let gToken = null; // { token, expiry }
 let selectedCalendarId = localStorage.getItem('sched_calendar_id') || null;
 let pendingSyncData = null; // { token, events }
@@ -609,10 +687,15 @@ let SHIFT_PRESETS = loadPresets();
 const S = {
   imageBase64: null,
   imageMime: null,
+  imageLoading: false,
+  imageLoadId: 0,
+  extracting: false,
   empName: localStorage.getItem('sched_name') || '',
   year: new Date().getFullYear(),
   month: new Date().getMonth() + 1,
   schedule: [],
+  imageDataUrl: null,
+  draftImage: null,
 };
 
 // ═══════════════════════════════════════════════
@@ -623,6 +706,10 @@ const S = {
   const savedKey = localStorage.getItem('sched_gemini_key') || '';
   if (savedKey) document.getElementById('geminiKey').value = savedKey;
   if (S.empName) document.getElementById('empName').value = S.empName;
+  const model = localStorage.getItem('sched_gemini_model');
+  document.getElementById('geminiModel').value = SUPPORTED_MODELS.includes(model) ? model : GEMINI_MODEL;
+  document.getElementById('personalSettings').open = !(savedKey && S.empName);
+  updateProfileSummary();
 
   // Populate year
   const yr = document.getElementById('selYear');
@@ -652,12 +739,84 @@ const S = {
 
   // 未完成草稿恢復
   checkDraft();
+  if (typeof location !== 'undefined' && location.hash === '#shortcut') {
+    document.getElementById('shortcutArrival').classList.remove('hidden');
+    // Never read the clipboard without a deliberate tap.
+    history.replaceState(null, '', location.pathname + location.search);
+  }
 })();
+
+function updateProfileSummary() {
+  const name = document.getElementById('empName').value.trim();
+  const hasKey = !!document.getElementById('geminiKey').value.trim();
+  document.getElementById('profileSummary').textContent = name && hasKey
+    ? `${name} · 已記住個人設定，選圖就能開始。`
+    : '先設定姓名與 Gemini 金鑰，之後只需選圖。';
+}
+
+function openPersonalSettings() {
+  goToStep(1);
+  document.getElementById('personalSettings').open = true;
+  document.getElementById('personalSettings').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function savePersonalSettings() {
+  const name = document.getElementById('empName').value.trim();
+  const key = document.getElementById('geminiKey').value.trim();
+  if (!name || !key) { toast('請填寫姓名與 Gemini API 金鑰', 'error'); return; }
+  try {
+    localStorage.setItem('sched_name', name);
+    localStorage.setItem('sched_gemini_key', key);
+    localStorage.setItem('sched_gemini_model', selectedModel());
+  } catch (err) { toast('瀏覽器無法儲存設定，請確認可用空間或隱私設定', 'error'); return; }
+  S.empName = name;
+  updateProfileSummary();
+  document.getElementById('personalSettings').open = false;
+  toast('個人設定已儲存', 'success');
+}
+
+function parseSharedImage(text) {
+  const prefix = 'ELIS_SCHEDULE_IMAGE_V1:';
+  const value = String(text || '').trim();
+  if (!value.startsWith(prefix)) throw new Error('剪貼簿沒有捷徑班表，請先從照片分享選單執行「班表轉行事曆」。');
+  const data = value.slice(prefix.length).replace(/\s/g, '');
+  if (!data || data.length > 16 * 1024 * 1024 || data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+    throw new Error('分享圖片格式不完整或超過 12 MB，請重新分享一張班表圖片。');
+  }
+  if (!data.startsWith('/9j/')) throw new Error('捷徑圖片不是 JPEG 格式，請使用提供的分享捷徑重新分享。');
+  return data;
+}
+
+async function importClipboardImage() {
+  try {
+    if (!navigator.clipboard?.readText) throw new Error('請在下方欄位長按並選擇「貼上」。');
+    const text = await navigator.clipboard.readText();
+    importSharedText(text);
+  } catch (err) {
+    document.getElementById('pasteFallback').classList.remove('hidden');
+    toast('請允許貼上，或在下方欄位長按並選擇「貼上」', 'error');
+  }
+}
+
+function importSharedText(text) {
+  try {
+    const data = parseSharedImage(text);
+    const bytes = Uint8Array.from(atob(data), ch => ch.charCodeAt(0));
+    handleImageFile(new File([bytes], '分享班表.jpg', { type:'image/jpeg' }));
+    document.getElementById('sharedImageText').value = '';
+    document.getElementById('pasteFallback').classList.add('hidden');
+    document.getElementById('shortcutArrival').classList.add('hidden');
+  } catch (err) { toast(err.message, 'error'); }
+}
 
 // ═══════════════════════════════════════════════
 //  NAVIGATION
 // ═══════════════════════════════════════════════
 function goToStep(n) {
+  if (n === 3 && (S.extracting || document.getElementById('confirmExtractionBtn').disabled)) {
+    toast('請先成功辨識班表並核對結果', 'error');
+    return;
+  }
   document.querySelectorAll('.step-section').forEach((s, i) => s.classList.toggle('active', i + 1 === n));
   for (let i = 1; i <= 3; i++) {
     const el = document.getElementById('nav' + i);
@@ -675,12 +834,33 @@ function goToStep(n) {
 const MAX_IMG_EDGE = 3000; // 僅在最長邊超過此值才縮圖，避免糊掉密集表格
 
 function handleImageFile(file) {
+  if (S.extracting) { toast('請等待本次辨識完成後再更換圖片', 'error'); return; }
+  if (!file.type.startsWith('image/')) { toast('請選擇 PNG、JPG 或 WEBP 班表圖片', 'error'); return; }
+  const loadId = ++S.imageLoadId;
+  S.imageLoading = true;
+  S.imageBase64 = null;
+  S.imageMime = null;
+  S.imageDataUrl = null;
+  S.schedule = [];
+  S.unknownCodes = [];
+  document.getElementById('confirmExtractionBtn').disabled = true;
+  document.getElementById('uploadPreview').style.display = 'none';
+  document.getElementById('uploadZone').style.display = 'block';
+  const fail = () => {
+    if (loadId !== S.imageLoadId) return;
+    S.imageLoading = false;
+    toast('無法讀取圖片，請改用 PNG、JPG 或 WEBP 截圖後重新上傳', 'error');
+  };
   const reader = new FileReader();
+  reader.onerror = fail;
+  reader.onabort = fail;
   reader.onload = e => {
+    if (loadId !== S.imageLoadId) return;
     const dataUrl = e.target.result;
     const img = new Image();
     img.onload = () => {
-      // canvas 重繪：校正 EXIF 轉向、解 iPhone HEIC、僅超標才縮小，統一輸出 JPEG
+      if (loadId !== S.imageLoadId) return;
+      // 僅處理瀏覽器能解碼的圖片；超標才縮小，統一輸出 JPEG。
       let { width, height } = img;
       const longest = Math.max(width, height);
       if (longest > MAX_IMG_EDGE) {
@@ -688,34 +868,36 @@ function handleImageFile(file) {
         width = Math.round(width * scale);
         height = Math.round(height * scale);
       }
-      const canvas = document.createElement('canvas');
-      canvas.width = width; canvas.height = height;
-      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
       let outUrl;
       try {
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
         outUrl = canvas.toDataURL('image/jpeg', 0.92);
+        if (!outUrl.startsWith('data:image/jpeg;base64,')) throw new Error('圖片轉換失敗');
         S.imageMime = 'image/jpeg';
         S.imageBase64 = outUrl.split(',')[1];
       } catch (err) {
-        // canvas 匯出失敗（極少見）→ 退回原圖
+        // 只有 Gemini 支援的原始格式可直接上傳。
+        if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { fail(); return; }
         outUrl = dataUrl;
         S.imageMime = file.type || 'image/jpeg';
         S.imageBase64 = dataUrl.split(',')[1];
       }
+      S.imageLoading = false;
       showPreview(outUrl);
     };
-    img.onerror = () => {
-      // 無法解碼（例如桌機不支援 HEIC）→ 仍嘗試以原圖上傳
-      S.imageMime = file.type || 'image/jpeg';
-      S.imageBase64 = dataUrl.split(',')[1];
-      showPreview(dataUrl);
-    };
+    img.onerror = fail;
     img.src = dataUrl;
   };
-  reader.readAsDataURL(file);
+  try { reader.readAsDataURL(file); } catch (err) { fail(); }
 }
 
 function showPreview(url) {
+  S.imageDataUrl = url;
   document.getElementById('previewImg').src = url;
   document.getElementById('scanImg').src = url;
   document.getElementById('uploadZone').style.display = 'none';
@@ -727,55 +909,75 @@ function showPreview(url) {
 //  EXTRACTION
 // ═══════════════════════════════════════════════
 async function startExtraction() {
+  if (S.extracting) return;
   const key  = document.getElementById('geminiKey').value.trim();
   const name = document.getElementById('empName').value.trim();
   const year = parseInt(document.getElementById('selYear').value);
   const month = parseInt(document.getElementById('selMonth').value);
 
-  if (!key)  { toast('請輸入 Gemini API 金鑰', 'error'); return; }
+  if (!key)  { openPersonalSettings(); toast('請輸入 Gemini API 金鑰', 'error'); return; }
+  if (S.imageLoading) { toast('圖片仍在讀取中，請稍候再開始分析', 'error'); return; }
   if (!S.imageBase64) { toast('請先上傳班表圖片', 'error'); return; }
-  if (!name) { toast('請輸入您在班表上的姓名', 'error'); return; }
+  if (!name) { openPersonalSettings(); toast('請輸入您在班表上的姓名', 'error'); return; }
 
   S.empName = name;
   S.year = year;
   S.month = month;
   localStorage.setItem('sched_gemini_key', key);
   localStorage.setItem('sched_name', name);
+  localStorage.setItem('sched_gemini_model', selectedModel());
+  updateProfileSummary();
+  document.getElementById('personalSettings').open = false;
 
   goToStep(2);
   await runExtraction();
 }
 
 async function reExtract() {
-  document.getElementById('loadingState').classList.remove('hidden');
-  document.getElementById('resultContent').classList.add('hidden');
-  document.getElementById('notFoundContent').classList.add('hidden');
-  document.getElementById('step2Btns').classList.add('hidden');
   await runExtraction();
 }
 
 async function runExtraction() {
+  if (S.extracting) return;
+  if (!S.imageBase64 || S.imageLoading) {
+    toast('請先重新上傳班表圖片，再進行辨識', 'error');
+    goToStep(1);
+    return;
+  }
+  S.extracting = true;
+  S.schedule = [];
+  S.unknownCodes = [];
+  document.getElementById('detectedPeriodNotice').classList.add('hidden');
+  saveDraft();
+  document.getElementById('loadingState').classList.remove('hidden');
+  document.getElementById('resultContent').classList.add('hidden');
+  document.getElementById('notFoundContent').classList.add('hidden');
+  document.getElementById('billingHelp').classList.add('hidden');
+  document.getElementById('step2Btns').classList.add('hidden');
+  document.getElementById('confirmExtractionBtn').disabled = true;
   const scanLine = document.getElementById('scanLine');
   const scanOverlay = document.getElementById('scanOverlay');
   scanLine.style.display = 'block';
   scanOverlay.classList.add('show');
 
   const daysInMonth = new Date(S.year, S.month, 0).getDate();
-  const prompt = `請仔細分析這張工作班表圖片。這是 ${S.year} 年 ${S.month} 月的班表，共 ${daysInMonth} 天。
+  const prompt = `請仔細分析這張工作班表圖片。使用者暫選 ${S.year} 年 ${S.month} 月（${daysInMonth} 天）。
+先讀取圖片上明確標示的年份與月份，回傳 year、month；無法看清則回傳 null，不能猜測。
+若圖片年月與暫選不同，請以圖片為準提取對應月份的全部日期，讓使用者在核對畫面確認。
 
 【重要說明】
 - 班表為橫向排列：日期從左至右（第1天→最後一天）
 - 最左欄為員工姓名
-- 頂部行為日期數字（1, 2, 3 ... 到 ${daysInMonth}）
+- 頂部行為日期數字（1, 2, 3 ... 到當月最後一天）
 - 每個格子包含班別代碼（通常為1-3個英文字母，如M、MA、H、E、P、RO等）
 
 【你的任務】
 找到名為「${S.empName}」的員工，提取他/她每一天的班別代碼。
 
 【準確度要求 - 非常重要】
-1. 先確認頂部日期欄位的總數（應為 ${daysInMonth}），填入 daysDetected
+1. 先確認頂部日期欄位的總數，填入 daysDetected
 2. 由左至右逐欄讀取，不要跳欄、不要漏欄
-3. 每一天（1 到 ${daysInMonth}）都必須在 schedule 中出現一次，不可重複、不可缺漏
+3. 每一天（1 到圖片該月最後一天）都必須在 schedule 中出現一次，不可重複、不可缺漏
 4. 如果某格為空白，code 填 ""（空字串）
 5. RO、AL、CL、SL 等假別代碼，照實回傳
 
@@ -785,6 +987,8 @@ async function runExtraction() {
     type: 'object',
     properties: {
       found: { type: 'boolean' },
+      year: { type: 'integer', nullable: true },
+      month: { type: 'integer', nullable: true },
       employee: { type: 'string' },
       daysDetected: { type: 'integer' },
       schedule: {
@@ -800,11 +1004,17 @@ async function runExtraction() {
     required: ['found'],
   };
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), EXTRACTION_TIMEOUT_MS);
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${localStorage.getItem('sched_gemini_key') || ''}`;
+    const key = document.getElementById('geminiKey').value.trim();
+    if (!key) throw new Error('請回到上傳頁輸入 Gemini API 金鑰。');
+    const model = selectedModel();
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      signal: controller.signal,
       body: JSON.stringify({
         contents: [{
           parts: [
@@ -815,8 +1025,7 @@ async function runExtraction() {
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema,
-          temperature: 0,
-          maxOutputTokens: 4096,
+          maxOutputTokens: model === 'gemini-4-argon' ? 32768 : 8192,
           thinkingConfig: { thinkingLevel: 'low' },
         },
       }),
@@ -824,41 +1033,75 @@ async function runExtraction() {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      if (isPrepaymentDepleted(err.error?.message)) document.getElementById('billingHelp').classList.remove('hidden');
       throw new Error(explainApiError(res.status, err.error?.message));
     }
 
     const data = await res.json();
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    scanLine.style.display = 'none';
-    scanOverlay.classList.remove('show');
-
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      throw new Error('AI 回傳格式無法解析，請重新辨識或換一張更清晰的圖。');
-    }
+    const parsed = parseExtractionResponse(data);
     renderResult(parsed);
 
   } catch (err) {
-    scanLine.style.display = 'none';
-    scanOverlay.classList.remove('show');
     document.getElementById('loadingState').classList.add('hidden');
     document.getElementById('notFoundContent').classList.remove('hidden');
-    document.getElementById('notFoundMsg').textContent = '發生錯誤：' + err.message;
+    document.getElementById('extractionErrorTitle').textContent = '班表辨識失敗';
+    const message = err.name === 'AbortError' ? '辨識逾時（90 秒），請稍後重試或改用較小、清晰的班表截圖。'
+      : err instanceof TypeError ? '無法連線至 Gemini，請檢查網路或瀏覽器的連線限制後重試。' : err.message;
+    document.getElementById('notFoundMsg').textContent = '發生錯誤：' + message;
     document.getElementById('availableNames').innerHTML = '';
     document.getElementById('step2Btns').classList.remove('hidden');
-    console.error(err);
+  } finally {
+    clearTimeout(timeout);
+    S.extracting = false;
+    scanLine.style.display = 'none';
+    scanOverlay.classList.remove('show');
   }
 }
 
+function parseExtractionResponse(data) {
+  if (data.promptFeedback?.blockReason) {
+    throw new Error(`Gemini 未處理這張圖片（${data.promptFeedback.blockReason}），請換一張班表截圖。`);
+  }
+  const candidate = data.candidates?.[0];
+  if (candidate?.finishReason === 'MAX_TOKENS') {
+    throw new Error('AI 回應超過長度限制，班表資料未完整回傳，請重新辨識。');
+  }
+  if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
+    throw new Error(`Gemini 未完成辨識（${candidate.finishReason}），請換一張班表截圖後重試。`);
+  }
+  // 回應可能先有思考或其他資料，且 JSON 可能跨多個文字段落。
+  const raw = (candidate?.content?.parts || [])
+    .filter(part => !part.thought && typeof part.text === 'string')
+    .map(part => part.text).join('').trim()
+    .replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1');
+  if (!raw) throw new Error('Gemini 未回傳辨識結果，請重新辨識或更換清晰圖片。');
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (err) {
+    throw new Error('AI 回傳格式無法解析，請重新辨識或換一張更清晰的圖。');
+  }
+  if (!parsed || typeof parsed.found !== 'boolean'
+      || (parsed.availableNames !== undefined && (!Array.isArray(parsed.availableNames)
+        || parsed.availableNames.some(name => typeof name !== 'string')))
+      || (parsed.found && (!Array.isArray(parsed.schedule) || !parsed.schedule.length
+        || parsed.schedule.some(item => !item || !Number.isInteger(item.date) || typeof item.code !== 'string')))) {
+    throw new Error('AI 回傳的班表資料不完整或格式不正確，請重新辨識。');
+  }
+  return parsed;
+}
+
 // Gemini API 錯誤分流，給可理解的處置訊息
+function isPrepaymentDepleted(msg) {
+  return /prepayment credits.*depleted|prepaid.*(?:depleted|exhausted)|insufficient.*prepaid/i.test(msg || '');
+}
+
 function explainApiError(status, msg) {
-  if (status === 429) return '已達 Gemini 免費額度上限，請稍後再試（通常隔幾分鐘或隔日恢復）。';
+  // Google 可能以不同狀態碼回報帳務問題，先檢查具體原因。
+  if (isPrepaymentDepleted(msg)) return 'Gemini API 專案所屬帳務帳戶的預付額度已用完，Google 未進行班表辨識。請先確認帳務與可用額度，再重新辨識。';
+  if (status === 429) return 'Gemini 請求過於頻繁或此專案額度不足，請至 Google AI Studio 檢查額度後再試。';
   if (status === 400 && /API key/i.test(msg || '')) return 'API 金鑰無效，請至 Step 1 重新輸入正確的 Gemini 金鑰。';
   if (status === 403) return 'API 金鑰權限不足或未啟用 Generative Language API。';
-  if (status === 404) return `找不到模型 ${GEMINI_MODEL}，可能已更名。`;
+  if (status === 401) return 'Gemini API 金鑰驗證失敗，請回到上傳頁確認金鑰。';
+  if (status === 404) return `此專案無法使用模型 ${selectedModel()}，請到個人設定選擇其他可用模型。`;
   if (status >= 500) return 'Gemini 伺服器暫時異常，請稍後重試。';
   return msg || `Gemini API 錯誤 ${status}`;
 }
@@ -870,6 +1113,7 @@ function renderResult(data) {
   document.getElementById('loadingState').classList.add('hidden');
 
   if (!data.found) {
+    document.getElementById('extractionErrorTitle').textContent = '找不到此員工';
     document.getElementById('notFoundContent').classList.remove('hidden');
     document.getElementById('notFoundMsg').textContent = `找不到「${S.empName}」。班表中找到以下員工：`;
     const el = document.getElementById('availableNames');
@@ -888,6 +1132,22 @@ function renderResult(data) {
     return;
   }
 
+  const hasYear = Number.isInteger(data.year) && data.year >= 2000 && data.year <= 2100;
+  const hasMonth = Number.isInteger(data.month) && data.month >= 1 && data.month <= 12;
+  if (hasYear) {
+    S.year = data.year;
+    const select = document.getElementById('selYear');
+    if (![...select.children].some(option => Number(option.value) === S.year)) {
+      const option = document.createElement('option'); option.value = S.year; option.textContent = S.year + ' 年'; select.appendChild(option);
+    }
+    select.value = S.year;
+  }
+  if (hasMonth) { S.month = data.month; document.getElementById('selMonth').value = S.month; }
+  document.getElementById('detectedPeriodNotice').textContent = hasYear && hasMonth
+    ? `圖片判讀為 ${S.year} 年 ${S.month} 月，請對照原圖確認年月與班別，再匯出。`
+    : `圖片年月無法完整確認，目前使用 ${S.year} 年 ${S.month} 月。請核對；若不正確，返回修改月份並重新辨識。`;
+  document.getElementById('detectedPeriodNotice').classList.remove('hidden');
+
   const daysInMonth = new Date(S.year, S.month, 0).getDate();
 
   // 只保留範圍內、非重複的日期；code 統一大寫
@@ -895,10 +1155,10 @@ function renderResult(data) {
   S.schedule = (data.schedule || [])
     .map(item => ({
       date: Number(item.date),
-      code: item.code ? String(item.code).toUpperCase() : '',
+      code: item.code ? String(item.code).trim().toUpperCase() : '',
     }))
     .filter(item => {
-      if (!(item.date >= 1 && item.date <= daysInMonth)) return false;
+      if (!Number.isInteger(item.date) || !(item.date >= 1 && item.date <= daysInMonth)) return false;
       if (seen.has(item.date)) return false;
       seen.add(item.date);
       return true;
@@ -951,6 +1211,7 @@ function renderScheduleView(employeeLabel, daysDetected) {
   document.getElementById('notFoundContent').classList.add('hidden');
   document.getElementById('resultContent').classList.remove('hidden');
   document.getElementById('step2Btns').classList.remove('hidden');
+  document.getElementById('confirmExtractionBtn').disabled = false;
 }
 
 function renderCalendar() {
@@ -1542,6 +1803,7 @@ function toggleKeyVis() {
 function clearKey() {
   localStorage.removeItem('sched_gemini_key');
   document.getElementById('geminiKey').value = '';
+  updateProfileSummary();
   toast('已清除本裝置的 API 金鑰', 'success');
 }
 
@@ -1640,7 +1902,7 @@ function resetShiftPresets() {
 
 // 從未知代碼警告開啟編輯器，並為每個未知代碼預建一列
 function openShiftEditor() {
-  goToStep(1);
+  openPersonalSettings();
   const body = document.getElementById('shiftEditorBody');
   if (body.classList.contains('hidden')) toggleShiftEditor();
   (S.unknownCodes || []).forEach(code => {
@@ -1653,22 +1915,60 @@ function openShiftEditor() {
 // ═══════════════════════════════════════════════
 //  DRAFT (未完成草稿恢復)
 // ═══════════════════════════════════════════════
-function saveDraft() {
-  try {
-    localStorage.setItem('sched_draft', JSON.stringify({
-      empName: S.empName, year: S.year, month: S.month,
-      schedule: S.schedule, imageMime: S.imageMime, ts: Date.now(),
-    }));
-  } catch (e) { /* localStorage 滿或無法用時忽略 */ }
+function openDraftDB() {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  if (!draftDBPromise) draftDBPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open('elis-personal-schedule', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('drafts');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  return draftDBPromise;
 }
 
-function clearDraft() { localStorage.removeItem('sched_draft'); }
+async function draftImageOperation(mode, value) {
+  const db = await openDraftDB();
+  if (!db) return null;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('drafts', mode === 'get' ? 'readonly' : 'readwrite');
+    const store = tx.objectStore('drafts');
+    const request = mode === 'get' ? store.get('current') : mode === 'delete' ? store.delete('current') : store.put(value, 'current');
+    tx.oncomplete = () => resolve(request.result || null);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
+function saveDraft() {
+  const draft = {
+    empName:S.empName, year:S.year, month:S.month,
+    schedule:S.schedule, imageMime:S.imageMime, ts:Date.now(),
+  };
+  try {
+    localStorage.setItem('sched_draft', JSON.stringify(draft));
+  } catch (e) { /* localStorage 滿或無法用時忽略 */ }
+  // Store only the latest image on this device; API keys are never included.
+  const snapshot = { ...draft, imageDataUrl:S.imageDataUrl };
+  draftWriteQueue = draftWriteQueue.catch(() => {}).then(() => draftImageOperation('put', snapshot));
+  draftWriteQueue.catch(() => {});
+}
+
+function clearDraft() {
+  localStorage.removeItem('sched_draft');
+  S.draftImage = null;
+  draftWriteQueue = draftWriteQueue.catch(() => {}).then(() => draftImageOperation('delete'));
+  draftWriteQueue.catch(() => {});
+}
 
 // 開頁時若有未完成草稿，顯示恢復橫幅（不自動套用）
-function checkDraft() {
+async function checkDraft() {
   let d;
   try { d = JSON.parse(localStorage.getItem('sched_draft') || 'null'); } catch (e) { return; }
-  if (!d || !d.schedule || !d.schedule.length) return;
+  try {
+    const image = await draftImageOperation('get');
+    if (d && image?.ts === d.ts) S.draftImage = image;
+  } catch (err) { /* Browsers without persistent storage still support image selection. */ }
+  if (!d || (!d.schedule?.length && !S.draftImage?.imageDataUrl)) return;
   const b = document.getElementById('restoreBanner');
   document.getElementById('restoreMsg').textContent =
     `偵測到上次未完成的班表（${d.year}年${d.month}月 · ${d.empName || '未命名'}），是否恢復？`;
@@ -1684,12 +1984,23 @@ function resumeDraft() {
   S.month = d.month || S.month;
   S.schedule = d.schedule || [];
   S.employeeLabel = S.empName;
+  if (S.draftImage?.imageDataUrl) {
+    const url = S.draftImage.imageDataUrl;
+    S.imageMime = S.draftImage.imageMime;
+    S.imageBase64 = url.split(',')[1];
+    showPreview(url);
+  }
   document.getElementById('selYear').value = S.year;
   document.getElementById('selMonth').value = S.month;
   if (S.empName) document.getElementById('empName').value = S.empName;
   document.getElementById('restoreBanner').classList.add('hidden');
-  goToStep(2);
-  renderScheduleView();
+  if (S.schedule.length) {
+    goToStep(2);
+    renderScheduleView();
+  } else {
+    goToStep(1);
+    toast('已恢復班表圖片，可直接重新辨識', 'success');
+  }
 }
 
 function dismissDraft() {
